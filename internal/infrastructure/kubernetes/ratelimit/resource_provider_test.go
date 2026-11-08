@@ -539,6 +539,58 @@ func TestDeployment(t *testing.T) {
 			},
 		},
 		{
+			caseName: "redis-tls-ca-configmap",
+			rateLimit: &egv1a1.RateLimit{
+				Backend: egv1a1.RateLimitDatabaseBackend{
+					Type: egv1a1.RedisBackendType,
+					Redis: &egv1a1.RateLimitRedisSettings{
+						URL: new("redis.redis.svc:6378"),
+						TLS: &egv1a1.RedisTLSSettings{
+							CACertificateRef: &gwapiv1.LocalObjectReference{
+								Kind: "ConfigMap",
+								Name: "redis-ca",
+							},
+						},
+					},
+				},
+			},
+			deploy: cfg.EnvoyGateway.GetEnvoyGatewayProvider().GetEnvoyGatewayKubeProvider().RateLimitDeployment,
+		},
+		{
+			caseName: "redis-tls-ca-secret-client-cert",
+			rateLimit: &egv1a1.RateLimit{
+				Backend: egv1a1.RateLimitDatabaseBackend{
+					Type: egv1a1.RedisBackendType,
+					Redis: &egv1a1.RateLimitRedisSettings{
+						URL: new("redis.redis.svc:6378"),
+						TLS: &egv1a1.RedisTLSSettings{
+							CertificateRef: &gwapiv1.SecretObjectReference{
+								Name: "ratelimit-cert",
+							},
+							CACertificateRef: &gwapiv1.LocalObjectReference{
+								Kind: "Secret",
+								Name: "redis-ca",
+							},
+						},
+					},
+				},
+			},
+			deploy: cfg.EnvoyGateway.GetEnvoyGatewayProvider().GetEnvoyGatewayKubeProvider().RateLimitDeployment,
+		},
+		{
+			caseName: "redis-tls-no-client-cert",
+			rateLimit: &egv1a1.RateLimit{
+				Backend: egv1a1.RateLimitDatabaseBackend{
+					Type: egv1a1.RedisBackendType,
+					Redis: &egv1a1.RateLimitRedisSettings{
+						URL: new("redis.redis.svc:6378"),
+						TLS: &egv1a1.RedisTLSSettings{},
+					},
+				},
+			},
+			deploy: cfg.EnvoyGateway.GetEnvoyGatewayProvider().GetEnvoyGatewayKubeProvider().RateLimitDeployment,
+		},
+		{
 			caseName: "redis-url-secret-ref",
 			rateLimit: &egv1a1.RateLimit{
 				Backend: egv1a1.RateLimitDatabaseBackend{
@@ -1087,6 +1139,37 @@ func TestValidateRedisSettings(t *testing.T) {
 			},
 		}), ns)
 		require.ErrorContains(t, err, "failed to get Secret")
+	})
+
+	t.Run("tls caCertificateRefs", func(t *testing.T) {
+		caConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "redis-ca", Namespace: ns},
+			Data:       map[string]string{"ca.crt": "ca"},
+		}
+		caSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "redis-ca-secret", Namespace: ns},
+			Data:       map[string][]byte{"ca.crt": []byte("ca")},
+		}
+		noKeyConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "redis-ca-no-key", Namespace: ns},
+			Data:       map[string]string{"ca.pem": "ca"},
+		}
+		c := fakeclient.NewClientBuilder().WithScheme(envoygateway.GetScheme()).
+			WithObjects(caConfigMap, caSecret, noKeyConfigMap).Build()
+		caGW := func(kind gwapiv1.Kind, name gwapiv1.ObjectName) *egv1a1.EnvoyGateway {
+			return redisGW(&egv1a1.RateLimitRedisSettings{
+				URL: new("redis.redis.svc:6378"),
+				TLS: &egv1a1.RedisTLSSettings{
+					CACertificateRef: &gwapiv1.LocalObjectReference{Kind: kind, Name: name},
+				},
+			})
+		}
+
+		require.NoError(t, Validate(context.Background(), c, caGW("ConfigMap", "redis-ca"), ns))
+		require.NoError(t, Validate(context.Background(), c, caGW("Secret", "redis-ca-secret"), ns))
+		require.ErrorContains(t, Validate(context.Background(), c, caGW("ConfigMap", "missing"), ns), "cannot find ConfigMap missing")
+		require.ErrorContains(t, Validate(context.Background(), c, caGW("Secret", "missing"), ns), "cannot find Secret missing")
+		require.ErrorContains(t, Validate(context.Background(), c, caGW("ConfigMap", "redis-ca-no-key"), ns), `has no "ca.crt" key`)
 	})
 
 	t.Run("tls certificateRef", func(t *testing.T) {

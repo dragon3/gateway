@@ -1800,6 +1800,73 @@ func TestValidateEnvoyGatewayRateLimitURLRef(t *testing.T) {
 	}
 }
 
+func TestValidateEnvoyGatewayRateLimitRedisTLS(t *testing.T) {
+	redisTLS := func(tls *egv1a1.RedisTLSSettings) *egv1a1.RateLimit {
+		return &egv1a1.RateLimit{
+			Backend: egv1a1.RateLimitDatabaseBackend{
+				Type: egv1a1.RedisBackendType,
+				Redis: &egv1a1.RateLimitRedisSettings{
+					URL: new("redis.redis.svc:6378"),
+					TLS: tls,
+				},
+			},
+		}
+	}
+	cases := []struct {
+		name      string
+		rateLimit *egv1a1.RateLimit
+		expectErr string
+	}{
+		{
+			name:      "tls without CA",
+			rateLimit: redisTLS(&egv1a1.RedisTLSSettings{}),
+		},
+		{
+			name: "ConfigMap CA",
+			rateLimit: redisTLS(&egv1a1.RedisTLSSettings{
+				CACertificateRef: &gwapiv1.LocalObjectReference{Kind: "ConfigMap", Name: "redis-ca"},
+			}),
+		},
+		{
+			name: "Secret CA",
+			rateLimit: redisTLS(&egv1a1.RedisTLSSettings{
+				CACertificateRef: &gwapiv1.LocalObjectReference{Group: "", Kind: "Secret", Name: "redis-ca"},
+			}),
+		},
+		{
+			name: "unsupported kind",
+			rateLimit: redisTLS(&egv1a1.RedisTLSSettings{
+				CACertificateRef: &gwapiv1.LocalObjectReference{Kind: "Service", Name: "redis-ca"},
+			}),
+			expectErr: "must be ConfigMap or Secret",
+		},
+		{
+			name: "unsupported group",
+			rateLimit: redisTLS(&egv1a1.RedisTLSSettings{
+				CACertificateRef: &gwapiv1.LocalObjectReference{Group: "example.com", Kind: "ConfigMap", Name: "redis-ca"},
+			}),
+			expectErr: "unsupported ratelimit redis tls caCertificateRef group",
+		},
+		{
+			name: "missing name",
+			rateLimit: redisTLS(&egv1a1.RedisTLSSettings{
+				CACertificateRef: &gwapiv1.LocalObjectReference{Kind: "ConfigMap"},
+			}),
+			expectErr: "name must be set",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateEnvoyGatewayRateLimit(tc.rateLimit)
+			if tc.expectErr != "" {
+				require.ErrorContains(t, err, tc.expectErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestValidateRedisURL(t *testing.T) {
 	require.NoError(t, ValidateRedisURL("redis.redis.svc:6379"))
 	require.NoError(t, ValidateRedisURL("a.redis.svc:6379,b.redis.svc:6379"))

@@ -15,6 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
+	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	egv1a1 "github.com/envoyproxy/gateway/api/v1alpha1"
 )
@@ -230,6 +231,10 @@ func validateEnvoyGatewayRateLimit(rateLimit *egv1a1.RateLimit) error {
 		return fmt.Errorf("empty ratelimit redis settings")
 	}
 
+	if err := validateRedisTLSSettings(redis.TLS); err != nil {
+		return err
+	}
+
 	hasURL := ptr.Deref(redis.URL, "") != ""
 	hasURLRef := redis.URLRef != nil
 	if hasURL == hasURLRef {
@@ -252,6 +257,26 @@ func validateEnvoyGatewayRateLimit(rateLimit *egv1a1.RateLimit) error {
 	}
 
 	return ValidateRedisURL(*redis.URL)
+}
+
+func validateRedisTLSSettings(tls *egv1a1.RedisTLSSettings) error {
+	if tls == nil {
+		return nil
+	}
+	ref := tls.CACertificateRef
+	if ref == nil {
+		return nil
+	}
+	if ref.Group != "" && ref.Group != gwapiv1.Group(corev1.GroupName) {
+		return fmt.Errorf("unsupported ratelimit redis tls caCertificateRef group %q", ref.Group)
+	}
+	if ref.Kind != "ConfigMap" && ref.Kind != "Secret" {
+		return fmt.Errorf("unsupported ratelimit redis tls caCertificateRef kind %q: must be ConfigMap or Secret", ref.Kind)
+	}
+	if ref.Name == "" {
+		return fmt.Errorf("ratelimit redis tls caCertificateRef name must be set")
+	}
+	return nil
 }
 
 // ValidateRedisURL validates a ratelimit Redis URL string, which may be a single

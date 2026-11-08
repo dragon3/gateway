@@ -854,6 +854,18 @@ type RedisTLSSettings struct {
 	// Currently only a Kubernetes Secret of type TLS is supported.
 	// +optional
 	CertificateRef *gwapiv1.SecretObjectReference `json:"certificateRef,omitempty"`
+
+	// CACertificateRef is a reference to a Kubernetes ConfigMap or Secret that
+	// contains the certificate of the Certificate Authority used to verify the
+	// certificate presented by the Redis server, in a key named `ca.crt`.
+	// The referenced object must exist in the namespace of the Envoy Gateway
+	// rate limit deployment.
+	//
+	// If unspecified, the Redis server certificate is verified against the
+	// system CA certificates.
+	//
+	// +optional
+	CACertificateRef *gwapiv1.LocalObjectReference `json:"caCertificateRef,omitempty"`
 }
 
 // RateLimitRedisSettings defines the configuration for connecting to redis database.

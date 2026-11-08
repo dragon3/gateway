@@ -6183,6 +6183,7 @@ _Appears in:_
 | Field | Type | Required | Default | Description |
 | ---   | ---  | ---      | ---     | ---         |
 | `certificateRef` | _[SecretObjectReference](https://gateway-api.sigs.k8s.io/reference/api-spec/1.5/spec/#secretobjectreference)_ |  false  |  | CertificateRef defines the client certificate reference for TLS connections.<br />Currently only a Kubernetes Secret of type TLS is supported. |
+| `caCertificateRef` | _[LocalObjectReference](#localobjectreference)_ |  false  |  | CACertificateRef is a reference to a Kubernetes ConfigMap or Secret that<br />contains the certificate of the Certificate Authority used to verify the<br />certificate presented by the Redis server, in a key named `ca.crt`.<br />The referenced object must exist in the namespace of the Envoy Gateway<br />rate limit deployment.<br />If unspecified, the Redis server certificate is verified against the<br />system CA certificates. |
 
 
 #### RedisURLSource
